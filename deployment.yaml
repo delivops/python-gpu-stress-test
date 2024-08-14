@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-test-deployment
+  namespace: nvidia-device-plugin # change to your namespace
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: gpu-test
+  template:
+    metadata:
+      labels:
+        app: gpu-test
+    spec:
+      # hostIPC: true # might be required for MPS communication
+      nodeSelector:
+        intent: gpu-enabled
+        feature.node.kubernetes.io/cpu-model.vendor_id: NVIDIA
+        feature.node.kubernetes.io/pci-10de.present: "true"
+        nvidia.com/gpu.present: "true"
+        # nvidia.com/mps.capable: "true" # mps-capable nodes
+      restartPolicy: Always
+      containers:
+        - name: pytorch-gpu-stress-test
+          image: nvcr.io/nvidia/pytorch:24.07-py3
+          command: ["sleep", "infinity"]
+          # command: ["python", "gpu-stress.py", "--device", "gpu"]
+
+          securityContext:
+            privileged: true # Allow the container to access the host's devices (required for GPU access)
+            # capabilities: # might be needed for MPS
+            #   add:
+            #     - SYS_ADMIN
+            #   drop:
+            #     - ALL
+          resources:
+            requests:
+              cpu: 1
+              memory: 4Gi
+            limits:
+              cpu: 1
+              memory: 4Gi
+              nvidia.com/gpu: 1
+
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
