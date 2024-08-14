@@ -1,19 +1,36 @@
+import argparse
+import logging
+import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torchvision import models
-
-# Set device to GPU if available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-if device.type == "cuda":
-    print(f"Using {torch.cuda.get_device_name(0)}")
-else:
-    print("CUDA is not available. Exiting...")
-    raise SystemExit
 
 
-# Define a simple model
+def setup_logger():
+    """Set up a logger with a specific format."""
+    logger = logging.getLogger("GPUStressTest")
+    logger.setLevel(logging.INFO)
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+
+
+def parse_arguments():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="GPU Stress Test Script")
+    parser.add_argument(
+        "--device",
+        choices=["cpu", "cuda"],
+        default="cuda",
+        help="Preferred device (default: cuda)",
+    )
+    return parser.parse_args()
+
+
 class SimpleModel(nn.Module):
     def __init__(self):
         super(SimpleModel, self).__init__()
@@ -38,23 +55,55 @@ class SimpleModel(nn.Module):
         return x
 
 
-model = SimpleModel().to(device)
+def gpu_stress_test(preferred_device: str = "cuda", logger=None):
+    """Perform a GPU stress test using a simple model."""
+    cuda_available = torch.cuda.is_available()
 
-# Create random input data
-input_data = torch.randn(64, 3, 128, 128).to(device)
+    if logger is None:
+        print("Logger is not provided. Exiting...")
+        sys.exit(1)
 
-# Define a loss function and optimizer
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+    if preferred_device == "cpu" and cuda_available:
+        logger.warning("CUDA is available, but CPU is requested. Using CPU.")
 
-print("Starting GPU stress test...")
+    if preferred_device == "cuda" and not cuda_available:
+        logger.error("CUDA is requested but not available. Exiting...")
+        sys.exit(1)
 
-# Run an infinite loop to stress the GPU
-while True:
-    optimizer.zero_grad()
-    output = model(input_data)
-    target = torch.randint(0, 10, (64,)).to(device)  # Random target
-    loss = criterion(output, target)
-    loss.backward()
-    optimizer.step()
-    print(f"Loss: {loss.item()}")
+    device = torch.device(
+        preferred_device if cuda_available or preferred_device == "cpu" else "cpu"
+    )
+
+    logger.info(f"Using device: {device}")
+    if device.type == "cuda":
+        logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
+
+    model = SimpleModel().to(device)
+    input_data = torch.randn(64, 3, 128, 128).to(device)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+    logger.info("Starting stress test...")
+
+    try:
+        while True:
+            optimizer.zero_grad()
+            output = model(input_data)
+            target = torch.randint(0, 10, (64,)).to(device)
+            loss = criterion(output, target)
+            loss.backward()
+            optimizer.step()
+            logger.info(f"Loss: {loss.item():.4f}")
+    except KeyboardInterrupt:
+        logger.info("Stress test interrupted by user.")
+
+
+def main():
+    """Main function to run the GPU stress test."""
+    logger = setup_logger()
+    args = parse_arguments()
+    gpu_stress_test(preferred_device=args.device, logger=logger)
+
+
+if __name__ == "__main__":
+    main()
