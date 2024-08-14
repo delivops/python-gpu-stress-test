@@ -1,6 +1,7 @@
 import argparse
 import logging
 import sys
+import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -85,25 +86,38 @@ def gpu_stress_test(preferred_device: str = "cuda", logger=None):
 
     logger.info("Starting stress test...")
 
-    try:
-        while True:
-            optimizer.zero_grad()
-            output = model(input_data)
-            target = torch.randint(0, 10, (64,)).to(device)
-            loss = criterion(output, target)
-            loss.backward()
-            optimizer.step()
-            logger.info(f"Loss: {loss.item():.4f}")
-    except KeyboardInterrupt:
-        logger.info("Stress test interrupted by user.")
+    loop_counter = 0
+    log_interval = 5  # Log every 5 seconds
+    start_time = time.time()
+    last_log_time = start_time
 
+    with open("perf.log", "w") as perf_log:
+        try:
+            while True:
+                optimizer.zero_grad()
+                output = model(input_data)
+                target = torch.randint(0, 10, (64,)).to(device)
+                loss = criterion(output, target)
+                loss.backward()
+                optimizer.step()
+                logger.info(f"Loss: {loss.item():.4f}")
 
-def main():
-    """Main function to run the GPU stress test."""
-    logger = setup_logger()
-    args = parse_arguments()
-    gpu_stress_test(preferred_device=args.device, logger=logger)
+                loop_counter += 1
+
+                current_time = time.time()
+                if current_time - last_log_time >= log_interval:
+                    elapsed_time = current_time - start_time
+                    perf_log.write(
+                        f"Loop count: {loop_counter}, Total elapsed time: {elapsed_time:.2f} seconds\n"
+                    )
+                    perf_log.flush()
+                    last_log_time = current_time
+
+        except KeyboardInterrupt:
+            logger.info("Stress test interrupted by user.")
 
 
 if __name__ == "__main__":
-    main()
+    logger = setup_logger()
+    args = parse_arguments()
+    gpu_stress_test(preferred_device=args.device, logger=logger)
