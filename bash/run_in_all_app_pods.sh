@@ -1,6 +1,6 @@
 #!/bin/bash
 
-python_script=$(dirname "$0")"../main.py"
+python_script=$(dirname "$0")"../gpu-stress.py"
 device="cpu" # "cpu" or "cuda"
 label="app=gpu-test"
 namespace="nvidia-device-plugin"
